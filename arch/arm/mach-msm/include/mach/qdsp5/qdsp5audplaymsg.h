@@ -43,7 +43,11 @@ typedef struct{
   unsigned int dec_id;           
 
   /*The read pointer offset of external memory till which bitstream 
+<<<<<<< HEAD
     has been dme’d in*/
+=======
+    has been dmeâ€™d in*/
+>>>>>>> e4512d4... msm: 7x27a: audio: Driver for supporting Low Power Audio
   unsigned int adecDataReadPtrOffset;  
 
   /*	The buffer size of external memory. */
