@@ -1679,7 +1679,6 @@ void usb_disconnect(struct usb_device **pdev)
 {
 	struct usb_device	*udev = *pdev;
 	int			i;
-	struct usb_hcd		*hcd = bus_to_hcd(udev->bus);
 
 	if (!udev) {
 		pr_debug ("%s nodev\n", __func__);
@@ -1696,7 +1695,7 @@ void usb_disconnect(struct usb_device **pdev)
 
 #ifdef CONFIG_USB_OTG
 	if (udev->bus->hnp_support && udev->portnum == udev->bus->otg_port) {
-		cancel_delayed_work_sync(&udev->bus->hnp_polling);
+		cancel_delayed_work(&udev->bus->hnp_polling);
 		udev->bus->hnp_support = 0;
 	}
 #endif
