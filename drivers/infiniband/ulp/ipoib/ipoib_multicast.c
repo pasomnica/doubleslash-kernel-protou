@@ -273,6 +273,7 @@ static int ipoib_mcast_join_finish(struct ipoib_mcast *mcast,
 
 		if (dev_queue_xmit(skb))
 			ipoib_warn(priv, "dev_queue_xmit failed to requeue packet\n");
+
 		netif_tx_lock_bh(dev);
 	}
 	netif_tx_unlock_bh(dev);
