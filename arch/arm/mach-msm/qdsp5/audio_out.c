@@ -75,7 +75,6 @@ tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec); \
 #define SRS_MASK_P 16
 #define SRS_MASK_HL 32
 
-
 enum {
 	EV_NULL,
 	EV_OPEN,
@@ -193,7 +192,6 @@ struct audio_copp {
 
 	int qconcert_plus_enable;
 	int qconcert_plus_needs_commit;
-
 	int srs_enable;
 	int srs_needs_commit;
 	int srs_feature_mask;
