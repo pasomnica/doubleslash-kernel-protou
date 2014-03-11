@@ -1556,6 +1556,12 @@ config MSM_RPCSERVER_WATCHDOG
 	help
 	  The dog_keepalive server handles watchdog events.
 
+config HTC_UV
+  bool "Make your phone uV"
+  default y
+  help
+    Attempt to uV this phone
+
 config MSM_RPC_WATCHDOG
 	depends on MSM_ONCRPCROUTER
 	default n
