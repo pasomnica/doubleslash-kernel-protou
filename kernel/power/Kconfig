@@ -312,3 +312,20 @@ config SUSPEND_TIME
 	  Prints the time spent in suspend in the kernel log, and
 	  keeps statistics on the time spent in suspend in
 	  /sys/kernel/debug/suspend_time
+<<<<<<< HEAD
+=======
+
+config QUICK_WAKEUP
+	bool "Quick wakeup"
+	depends on SUSPEND
+	default n
+	---help---
+	  Allow kernel driver to do periodic jobs without resuming the full system
+	  This option can increase battery life on android powered smartphone.
+
+config HTC_PNPMGR
+	bool "Htc Power and Performance manager"
+	depends on PM
+	---help---
+	  Collect the sysfs files nodes for pnpmgr usage.
+>>>>>>> 17cada4... Quick up added+toolchainmontly update
