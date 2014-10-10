@@ -312,8 +312,6 @@ config SUSPEND_TIME
 	  Prints the time spent in suspend in the kernel log, and
 	  keeps statistics on the time spent in suspend in
 	  /sys/kernel/debug/suspend_time
-<<<<<<< HEAD
-=======
 
 config QUICK_WAKEUP
 	bool "Quick wakeup"
@@ -328,4 +326,3 @@ config HTC_PNPMGR
 	depends on PM
 	---help---
 	  Collect the sysfs files nodes for pnpmgr usage.
->>>>>>> 17cada4... Quick up added+toolchainmontly update
