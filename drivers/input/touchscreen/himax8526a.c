@@ -1170,7 +1170,7 @@ static DECLARE_WORK(himax_s2w_power_work, himax_s2w_power);
 
 void himax_h2w_pwrFunc() {
 	if (pocketmode_switch) {
-		if (!power_key_check_in_pocket() && !private_ts->s2w_timerdenied)
+		if (!private_ts->s2w_timerdenied)
 			schedule_work(&himax_s2w_power_work);	
 		else
 			himax_s2w_timerStart();
@@ -1978,27 +1978,6 @@ static int himax8526a_probe(struct i2c_client *client, const struct i2c_device_i
 		goto err_input_register_device_failed;
 	}
 
-	if (get_tamper_sf() == 0) {
-		ts->debug_log_level |= BIT(3);
-		printk(KERN_INFO "[TP]%s: Enable touch down/up debug log since not security-on device",
-			__func__);
-		if (pdata->screenWidth > 0 && pdata->screenHeight > 0 &&
-		 (pdata->abs_x_max - pdata->abs_x_min) > 0 &&
-		 (pdata->abs_y_max - pdata->abs_y_min) > 0) {
-			ts->widthFactor = (pdata->screenWidth << SHIFTBITS)/(pdata->abs_x_max - pdata->abs_x_min);
-			ts->heightFactor = (pdata->screenHeight << SHIFTBITS)/(pdata->abs_y_max - pdata->abs_y_min);
-			if (ts->widthFactor > 0 && ts->heightFactor > 0)
-				ts->useScreenRes = 1;
-			else {
-				ts->heightFactor = 0;
-				ts->widthFactor = 0;
-				ts->useScreenRes = 0;
-			}
-		} else
-			printk(KERN_INFO "[TP] Enable finger debug with raw position mode!\n");
-	}
-
-
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING + 1;
 	ts->early_suspend.suspend = himax_ts_early_suspend;
@@ -2189,26 +2168,21 @@ static int himax8526a_resume(struct i2c_client *client)
 #endif
 	data[0] = 0x00;
 	i2c_himax_write(ts->client, 0xD7, &data[0], 1, HIMAX_I2C_RETRY_TIMES);
-	hr_msleep(5);
 
 	data[0] = 0x42;
 	data[1] = 0x02;
 	i2c_himax_master_write(ts->client, data, sizeof(data), HIMAX_I2C_RETRY_TIMES);
 
 	if (ts->pdata->regCD) {
-		hr_msleep(1);
 		data[0] = 0x0F;
 		data[1] = 0x53;
 		i2c_himax_write(ts->client, 0x36, &data[0], 2, HIMAX_I2C_RETRY_TIMES);
-		hr_msleep(1);
 		i2c_himax_master_write(ts->client, ts->pdata->regCD, 3, HIMAX_I2C_RETRY_TIMES);
 #if 0
 		printk(KERN_INFO "[TP]%s: Issue 0x36, 0xDD to prevent potential ESD problem.\n", __func__);
 #endif
-		hr_msleep(1);
 	}
 	i2c_himax_write_command(ts->client, 0x83, HIMAX_I2C_RETRY_TIMES);
-	hr_msleep(30);
 
 	i2c_himax_write_command(ts->client, 0x81, HIMAX_I2C_RETRY_TIMES);
 #ifdef HIMAX_S2W
@@ -2217,7 +2191,6 @@ static int himax8526a_resume(struct i2c_client *client)
 #if 0
 	printk(KERN_DEBUG "[TP]%s: diag_command= %d\n", __func__, ts->diag_command);
 #endif
-	hr_msleep(5);
 	if (ts->diag_command == 1 || ts->diag_command == 3 || ts->diag_command == 5) {
 		new_command[1] = command_ec_128_raw_baseline_flag;
 		i2c_himax_master_write(ts->client, new_command, sizeof(new_command), HIMAX_I2C_RETRY_TIMES);

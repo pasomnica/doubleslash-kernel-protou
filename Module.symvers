@@ -425,6 +425,7 @@
 0x00000000	xfrm_register_type	vmlinux	EXPORT_SYMBOL
 0x00000000	nf_ct_invert_tuple	vmlinux	EXPORT_SYMBOL_GPL
 0x00000000	cpufreq_get	vmlinux	EXPORT_SYMBOL
+0x00000000	himax_s2w_setinp	vmlinux	EXPORT_SYMBOL
 0x00000000	fat_sync_inode	vmlinux	EXPORT_SYMBOL_GPL
 0x00000000	put_mnt_ns	vmlinux	EXPORT_SYMBOL
 0x00000000	clear_bdi_congested	vmlinux	EXPORT_SYMBOL
