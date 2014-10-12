@@ -2,7 +2,7 @@
 #define HIMAX8526a_H
 #include <linux/types.h>
 #include <linux/i2c.h>
-
+#include <linux/input.h>
 #define HIMAX8526A_NAME "Himax8526a"
 #define HIMAX8526A_FINGER_SUPPORT_NUM 4
 struct himax_config_init_api {
@@ -64,7 +64,7 @@ struct himax_i2c_platform_data_config_type_1 {
 	uint8_t c44[6];
 	uint8_t checksum[3];
 };
-
+extern void himax_s2w_setinp(struct input_dev *dev);
 struct himax_i2c_platform_data_config_type_2 {
 	uint8_t version;
 	uint8_t tw_id;
@@ -182,7 +182,7 @@ struct himax_i2c_platform_data_config_type_3 {
 };
 
 struct himax_i2c_platform_data {
-	/* common variables */
+	
 	int abs_x_min;
 	int abs_x_max;
 	int abs_x_fuzz;
@@ -198,38 +198,40 @@ struct himax_i2c_platform_data {
 	int (*power)(int on);
 	int gpio_irq;
 	int gpio_reset;
+	struct kobject *vk_obj;
+	struct kobj_attribute *vk2Use;
 	uint8_t slave_addr;
 	uint32_t event_htc_enable;
 	uint8_t cable_config[2];
 
-	/* To support Sprint 2a2b request, inject 2a2b in google format. Naming as synaptic solution*/
+	
 	uint8_t support_htc_event;
-	/* Support Sprint 2a2b --End--*/
+	
 
-	/* To decide Protocol A+ID(0) or B+ID(1) */
+	
 	uint8_t protocol_type;
 
-	/* For fake event --start-- */
+	
 	int screenWidth;
 	int screenHeight;
-	/* For fake event --end-- */
+	
 
-	/* Touch Window Vendor Names --Start-- */
+	
 	char ID0[20];
 	char ID1[20];
 	char ID2[20];
 	char ID3[20];
-	/* Touch Window Vendor Names --End-- */
+	
 
 	void (*reset)(void);
 	int (*loadSensorConfig)(struct i2c_client *client, struct himax_i2c_platform_data *pdata, struct himax_config_init_api *i2c_api);
-	/* for compatible and caching purpose */
+	
 	uint8_t version;
 	uint8_t fw_version;
 	uint8_t tw_id;
-	/* for resume ESD recovery clock divider restore */
+	
 	uint8_t *regCD;
-	/* types of configurations */
+	
 	struct himax_i2c_platform_data_config_type_1 *type1;
 	int type1_size;
 	struct himax_i2c_platform_data_config_type_2 *type2;
