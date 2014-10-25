@@ -110,5 +110,6 @@ int parse_tag_engineerid(const struct tag * tags);
 char *board_serialno(void);
 unsigned long get_kernel_flag(void);
 unsigned int get_radio_flag(void);
+unsigned int get_tamper_sf(void);
 int __init parse_tag_security(const struct tag *tags);
 #endif

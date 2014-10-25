@@ -37,6 +37,7 @@
 #include <linux/wakelock.h>
 #include <linux/jiffies.h>
 #include <mach/board.h>
+#include <mach/board_htc.h>
 
 #define D(x...) pr_info(x)
 
@@ -63,6 +64,7 @@ static DECLARE_DELAYED_WORK(polling_work, polling_do_work);
 static uint8_t sensor_chipId[3] = {0};
 static void report_near_do_work(struct work_struct *w);
 static DECLARE_DELAYED_WORK(report_near_work, report_near_do_work);
+static int is_probe_success;
 
 struct cm3629_info {
 	struct class *cm3629_class;
@@ -139,6 +141,8 @@ struct cm3629_info {
 	uint8_t ps_debounce;
 	uint16_t ps_delay_time;
 	unsigned int no_need_change_setting;
+	int ps_th_add;
+	uint8_t dark_level;
 };
 
 static uint8_t ps1_canc_set;
@@ -152,6 +156,8 @@ static struct mutex als_enable_mutex, als_disable_mutex, als_get_adc_mutex;
 static int lightsensor_enable(struct cm3629_info *lpi);
 static int lightsensor_disable(struct cm3629_info *lpi);
 static void psensor_initial_cmd(struct cm3629_info *lpi);
+static int ps_near;
+static int pocket_mode_flag;
 #if (0)
 static int I2C_RxData(uint16_t slaveAddr, uint8_t *rxData, int length)
 {
@@ -2055,6 +2061,66 @@ err_unregister_ls_input_device:
 err_free_ls_input_device:
 	input_free_device(lpi->ls_input_dev);
 	return ret;
+}
+int pocket_detection_check(void)
+{
+ 	struct cm3629_info *lpi = lp_info;
+ 
+ 	if (!is_probe_success) {
+ 		printk("[cm3629] %s return by cm3629 probe fail\n", __func__);
+ 		return 0;
+ 	}
+ 	pocket_mode_flag = 1;
+ 
+ 	psensor_enable(lpi);
+ 	D("[cm3629] %s ps_near = %d\n", __func__, ps_near);
+ 	psensor_disable(lpi);
+ 
+ 	pocket_mode_flag = 0;
+	return (ps_near);
+}
+
+int power_key_check_in_pocket(void)
+{
+	struct cm3629_info *lpi = lp_info;
+	int ls_dark;
+ 
+ 	uint32_t ls_adc = 0;
+ 	int ls_level = 0;
+ 	int i;
+ 	if (!is_probe_success) {
+ 		D("[cm3629] %s return by cm3629 probe fail\n", __func__);
+ 		return 0;
+ 	}
+ 	pocket_mode_flag = 1;
+ 	D("[cm3629] %s +++\n", __func__);
+ 	
+ 	psensor_enable(lpi);
+ 	D("[cm3629] %s ps_near %d\n", __func__, ps_near);
+ 	psensor_disable(lpi);
+ 
+ 	
+ 	mutex_lock(&als_get_adc_mutex);
+ 	get_ls_adc_value(&ls_adc, 0);
+ 	enable_als_interrupt();
+ 	mutex_unlock(&als_get_adc_mutex);
+ 	for (i = 0; i < 10; i++) {
+ 		if (ls_adc <= (*(lpi->adc_table + i))) {
+ 			ls_level = i;
+ 			if (*(lpi->adc_table + i))
+ 				break;
+ 		}
+ 		if (i == 9) {
+ 			ls_level = i;
+ 			break;
+ 		}
+ 	}
+ 	D("[cm3629] %s ls_adc %d, ls_level %d\n", __func__, ls_adc, ls_level);
+ 	ls_dark = (ls_level <= lpi->dark_level) ? 1 : 0;
+ 
+ 	D("[cm3629] %s --- ls_dark %d\n", __func__, ls_dark);
+ 	pocket_mode_flag = 0;
+ 	return (ls_dark && ps_near);
 }
 
 static int psensor_setup(struct cm3629_info *lpi)
