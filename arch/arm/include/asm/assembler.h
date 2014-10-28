@@ -191,7 +191,7 @@
 #define ALT_UP_B(label) b label
 #endif
 
-	.macro	save_and_disable_irqs_notrace, oldcpsr
+	.macro oldcpsr
 	mrs	\oldcpsr, cpsr
 	disable_irq_notrace
 	.endm
