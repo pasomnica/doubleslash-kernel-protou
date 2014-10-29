@@ -1929,6 +1929,7 @@
 0x00000000	netdev_set_master	vmlinux	EXPORT_SYMBOL
 0x00000000	__skb_checksum_complete_head	vmlinux	EXPORT_SYMBOL
 0x00000000	spi_bitbang_transfer	vmlinux	EXPORT_SYMBOL_GPL
+0x00000000	unlink_framebuffer	vmlinux	EXPORT_SYMBOL
 0x00000000	__percpu_counter_add	vmlinux	EXPORT_SYMBOL
 0x00000000	__percpu_counter_sum	vmlinux	EXPORT_SYMBOL
 0x00000000	ida_init	vmlinux	EXPORT_SYMBOL
