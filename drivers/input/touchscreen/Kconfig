@@ -12,10 +12,12 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 
 config TSMODS
+	default y
 	tristate "TS MODS SYSFS"
 	depends on I2C
 	help
-	  
+	  Say Y here if you're going to use Infinity's Toolbox for 
+	  x2W mods.
 
 
 config TOUCHSCREEN_88PM860X

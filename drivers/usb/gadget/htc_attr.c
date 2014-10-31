@@ -507,6 +507,25 @@ void android_switch_adb_ums(void)
 				(1 << USB_FUNCTION_UMS));
 }
 
+void android_switch_default(void)
+{
+	unsigned val;
+
+	mutex_lock(&function_bind_sem);
+	val = htc_usb_get_func_combine_value();
+	mutex_unlock(&function_bind_sem);
+
+	if (val & (1 << USB_FUNCTION_ADB))
+		android_switch_function(
+				(1 << USB_FUNCTION_MTP) |
+				(1 << USB_FUNCTION_ADB) |
+				(1 << USB_FUNCTION_UMS));
+	else
+		android_switch_function(
+				(1 << USB_FUNCTION_MTP) |
+				(1 << USB_FUNCTION_UMS));
+}
+
 void android_switch_htc_mode(void)
 {
 	android_switch_function((1 << USB_FUNCTION_ADB) |

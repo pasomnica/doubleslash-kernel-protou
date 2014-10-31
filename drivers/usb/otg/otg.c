@@ -13,18 +13,11 @@
 #include <linux/device.h>
 
 #include <linux/usb/otg.h>
+#include <linux/init.h>
+#include <linux/module.h>
 
 static struct otg_transceiver *xceiv;
 
-/**
- * otg_get_transceiver - find the (single) OTG transceiver
- *
- * Returns the transceiver driver, after getting a refcount to it; or
- * null if there is no such transceiver.  The caller is responsible for
- * calling otg_put_transceiver() to release that count.
- *
- * For use by USB host and peripheral drivers.
- */
 struct otg_transceiver *otg_get_transceiver(void)
 {
 	if (xceiv)
@@ -33,14 +26,6 @@ struct otg_transceiver *otg_get_transceiver(void)
 }
 EXPORT_SYMBOL(otg_get_transceiver);
 
-/**
- * otg_put_transceiver - release the (single) OTG transceiver
- * @x: the transceiver returned by otg_get_transceiver()
- *
- * Releases a refcount the caller received from otg_get_transceiver().
- *
- * For use by USB host and peripheral drivers.
- */
 void otg_put_transceiver(struct otg_transceiver *x)
 {
 	if (x)
@@ -48,14 +33,6 @@ void otg_put_transceiver(struct otg_transceiver *x)
 }
 EXPORT_SYMBOL(otg_put_transceiver);
 
-/**
- * otg_set_transceiver - declare the (single) OTG transceiver
- * @x: the USB OTG transceiver to be used; or NULL
- *
- * This call is exclusively for use by transceiver drivers, which
- * coordinate the activities of drivers for host and peripheral
- * controllers, and in some cases for VBUS current regulation.
- */
 int otg_set_transceiver(struct otg_transceiver *x)
 {
 	if (xceiv && x)
