@@ -1472,8 +1472,8 @@ int write_one_page(struct page *page, int wait);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_MAX_READAHEAD	2048
-#define VM_MIN_READAHEAD	32	
+#define VM_MAX_READAHEAD	1024
+#define VM_MIN_READAHEAD	16	
 extern unsigned long max_readahead_pages;
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
 			pgoff_t offset, unsigned long nr_to_read);
