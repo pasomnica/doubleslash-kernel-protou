@@ -20,6 +20,5 @@ obj-$(CONFIG_ARCH_MSM7X27A) += audio_fm.o
 obj-$(CONFIG_ARCH_MSM7X27A) += audio_mvs.o
 obj-$(CONFIG_ARCH_MSM7X27A) += audio_lpa.o
 obj-$(CONFIG_ARCH_MSM7X27A) += audio_voicememo.o
-obj-$(CONFIG_ARCH_MSM7X27A) += audio_lpa.o
 
 CFLAGS_audio_lpa.o := -DDEBUG
