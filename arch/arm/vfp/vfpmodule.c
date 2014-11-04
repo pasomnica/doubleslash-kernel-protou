@@ -15,6 +15,7 @@
 #include <linux/notifier.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <linux/hardirq.h>
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/uaccess.h>
@@ -38,6 +39,17 @@ void vfp_null_entry(void);
 
 void (*vfp_vector)(void) = vfp_null_entry;
 
+union vfp_state *vfp_current_hw_state[NR_CPUS];
+
+static bool vfp_state_in_hw(unsigned int cpu, struct thread_info *thread)
+{
+#ifdef CONFIG_SMP
+	if (thread->vfpstate.hard.cpu != cpu)
+		return false;
+#endif
+	return vfp_current_hw_state[cpu] == &thread->vfpstate;
+}
+
 /*
  * The pointer to the vfpstate structure of the thread which currently
  * owns the context held in the VFP hardware, or NULL if the hardware
@@ -51,6 +63,7 @@ union vfp_state *vfp_current_hw_state[NR_CPUS];
  * After startup, holds VFP architecture
  */
 unsigned int VFP_arch;
+static atomic64_t vfp_bounce_count = ATOMIC64_INIT(0);
 
 /*
  * Per-thread VFP initialization.
