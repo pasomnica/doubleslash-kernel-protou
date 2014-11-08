@@ -139,12 +139,16 @@ extern void vfp_flush_hwstate(struct thread_info *);
 #define TIF_NEED_RESCHED	1
 #define TIF_NOTIFY_RESUME	2	/* callback before returning to user */
 #define TIF_SYSCALL_TRACE	8
+#define TIF_SYSCALL_AUDIT	9
+#define TIF_SYSCALL_TRACEPOINT	10
 #define TIF_POLLING_NRFLAG	16
+#define TIF_SECCOMP		11	/* seccomp syscall filtering active */
 #define TIF_USING_IWMMXT	17
 #define TIF_MEMDIE		18	/* is terminating due to OOM killer */
 #define TIF_FREEZE		19
 #define TIF_RESTORE_SIGMASK	20
-#define TIF_SECCOMP		21
+#define TIF_SWITCH_MM		22	/* deferred switch_mm */
+#define TIF_MM_RELEASED		23	/* task MM has been released */
 
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)

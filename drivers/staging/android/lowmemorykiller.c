@@ -29,17 +29,23 @@
  *
  */
 
-#include <linux/kernel.h>
-#include <linux/kobject.h>
-#include <linux/memory.h>
-#include <linux/memory_hotplug.h>
-#include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/notifier.h>
+#include <linux/kernel.h>
+#include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/sysfs.h>
+#include <linux/rcupdate.h>
+#include <linux/notifier.h>
+#include <linux/swap.h>
+#include <asm/thread_info.h>
+
+#ifdef CONFIG_HIGHMEM
+#define _ZONE ZONE_HIGHMEM
+#else
+#define _ZONE ZONE_NORMAL
+#endif
+
+#define TIF_MM_RELEASED		23	/* task MM has been released */
 
 static uint32_t lowmem_debug_level = 2;
 static int lowmem_adj[6] = {
@@ -56,79 +62,16 @@ static size_t lowmem_minfree[6] = {
 	16 * 1024,	/* 64MB */
 };
 static int lowmem_minfree_size = 4;
+static int lmk_fast_run = 1;
 
-/*
- * if we are in boost_duration (before fork_boost timeout happens)
- *   adj_array = fork_boost_adj
- *   min_array = lowmem_minfree[] + lowmem_fork_boost_minfree[]
- * else
- *   adj_array = lowmem_adj;
- *   min_array = lowmem_minfree;
- * endif
- */
-static size_t lowmem_fork_boost_minfree[6] = {
-	0,
-	0,
-	0,
-	0,
-	6 * 1024,	/* 24MB */
-	6 * 1024,	/* 24MB */
-};
-static int lowmem_fork_boost_minfree_size = 6;
-static size_t fork_boost_adj[6] = {
-	0,
-	2,
-	4,
-	7,
-	9,
-	12
-};
-static int fork_boost_adj_size = 6;
-
-static size_t lowmem_minfree_notif_trigger;
-
-static unsigned int offlining;
 static struct task_struct *lowmem_deathpending;
 static unsigned long lowmem_deathpending_timeout;
-static struct kobject *lowmem_kobj;
-
-static uint32_t lowmem_fork_boost = 1;
-static unsigned long lowmem_fork_boost_timeout;
-static unsigned long boost_duration = (HZ << 1);
-static int last_min_selected_adj = OOM_ADJUST_MAX + 1;
 
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
 			printk(x);			\
 	} while (0)
-
-/**
- * dump_tasks - dump current memory state of all system tasks
- *
- * this helper function is copied from mm/oom_kill.c
- *
- * Call with tasklist_lock read-locked.
- */
-static void dump_tasks(void)
-{
-	struct task_struct *p;
-	struct task_struct *task;
-
-	pr_info("[ pid ]   uid  total_vm      rss cpu oom_adj  name\n");
-	for_each_process(p) {
-		task = find_lock_task_mm(p);
-		if (!task) {
-			continue;
-		}
-
-		pr_info("[%5d] %5d  %8lu %8lu %3u     %3d  %s\n",
-			task->pid, task_uid(task),
-			task->mm->total_vm, get_mm_rss(task->mm),
-			task_cpu(task), task->signal->oom_adj, task->comm);
-		task_unlock(task);
-	}
-}
 
 static int
 task_notify_func(struct notifier_block *self, unsigned long val, void *data);
@@ -148,73 +91,102 @@ task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 	return NOTIFY_OK;
 }
 
-static int
-task_fork_notify_func(struct notifier_block *self, unsigned long val, void *data);
-
-static struct notifier_block task_fork_nb = {
-	.notifier_call	= task_fork_notify_func,
-};
-
-static int
-task_fork_notify_func(struct notifier_block *self, unsigned long val, void *data)
+static int test_task_flag(struct task_struct *p, int flag)
 {
-	lowmem_fork_boost_timeout = jiffies + boost_duration;
+	struct task_struct *t = p;
 
-	return NOTIFY_OK;
+	do {
+		task_lock(t);
+		if (test_tsk_thread_flag(t, flag)) {
+			task_unlock(t);
+			return 1;
+		}
+		task_unlock(t);
+	} while_each_thread(p, t);
+
+	return 0;
 }
 
-#ifdef CONFIG_MEMORY_HOTPLUG
-static int lmk_hotplug_callback(struct notifier_block *self,
-				unsigned long cmd, void *data)
-{
-	switch (cmd) {
-	/* Don't care LMK cases */
-	case MEM_ONLINE:
-	case MEM_OFFLINE:
-	case MEM_CANCEL_ONLINE:
-	case MEM_CANCEL_OFFLINE:
-	case MEM_GOING_ONLINE:
-		offlining = 0;
-		lowmem_print(4, "lmk in normal mode\n");
-		break;
-	/* LMK should account for movable zone */
-	case MEM_GOING_OFFLINE:
-		offlining = 1;
-		lowmem_print(4, "lmk in hotplug mode\n");
-		break;
-	}
-	return NOTIFY_DONE;
-}
-#endif
 
-
-
-static void lowmem_notify_killzone_approach(void);
-
-static inline void get_free_ram(int *other_free, int *other_file)
+void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
+					int *other_free, int *other_file)
 {
 	struct zone *zone;
-	*other_free = global_page_state(NR_FREE_PAGES);
-	*other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
+	struct zoneref *zoneref;
+	int zone_idx;
 
-	if (offlining) {
-		/* Discount all free space in the section being offlined */
-		for_each_zone(zone) {
-			 if (zone_idx(zone) == ZONE_MOVABLE) {
+	for_each_zone_zonelist(zone, zoneref, zonelist, MAX_NR_ZONES) {
+		if ((zone_idx = zonelist_zone_idx(zoneref)) == ZONE_MOVABLE)
+			continue;
+
+		if (zone_idx > classzone_idx) {
+			if (other_free != NULL)
 				*other_free -= zone_page_state(zone,
-						NR_FREE_PAGES);
-				lowmem_print(4, "lowmem_shrink discounted "
-					"%lu pages in movable zone\n",
-					zone_page_state(zone, NR_FREE_PAGES));
-			}
+							       NR_FREE_PAGES);
+			if (other_file != NULL)
+				*other_file -= zone_page_state(zone,
+							       NR_FILE_PAGES)
+					      - zone_page_state(zone, NR_SHMEM);
+		} else if (zone_idx < classzone_idx) {
+			if (zone_watermark_ok(zone, 0, 0, classzone_idx, 0))
+				*other_free -=
+				           zone->lowmem_reserve[classzone_idx];
+			else
+				*other_free -=
+				           zone_page_state(zone, NR_FREE_PAGES);
 		}
+	}
+}
+
+void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
+{
+	gfp_t gfp_mask;
+	struct zone *preferred_zone;
+	struct zonelist *zonelist;
+	enum zone_type high_zoneidx, classzone_idx;
+	unsigned long balance_gap;
+
+	gfp_mask = sc->gfp_mask;
+	zonelist = node_zonelist(0, gfp_mask);
+	high_zoneidx = gfp_zone(gfp_mask);
+	first_zones_zonelist(zonelist, high_zoneidx, NULL, &preferred_zone);
+	classzone_idx = zone_idx(preferred_zone);
+
+	balance_gap = min(low_wmark_pages(preferred_zone),
+			  (preferred_zone->present_pages +
+			   KSWAPD_ZONE_BALANCE_GAP_RATIO-1) /
+			   KSWAPD_ZONE_BALANCE_GAP_RATIO);
+
+	if (likely(current_is_kswapd() && zone_watermark_ok(preferred_zone, 0,
+			  high_wmark_pages(preferred_zone) + SWAP_CLUSTER_MAX +
+			  balance_gap, 0, 0))) {
+		if (lmk_fast_run)
+			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+				       other_file);
+		else
+			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+				       NULL);
+
+		if (zone_watermark_ok(preferred_zone, 0, 0, _ZONE, 0))
+			*other_free -=
+			           preferred_zone->lowmem_reserve[_ZONE];
+		else
+			*other_free -= zone_page_state(preferred_zone,
+						      NR_FREE_PAGES);
+		lowmem_print(4, "lowmem_shrink of kswapd tunning for highmem "
+			     "ofree %d, %d\n", *other_free, *other_file);
+	} else {
+		tune_lmk_zone_param(zonelist, classzone_idx, other_free,
+			       other_file);
+
+		lowmem_print(4, "lowmem_shrink tunning for others ofree %d, "
+			     "%d\n", *other_free, *other_file);
 	}
 }
 
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
-	struct task_struct *p;
+	struct task_struct *tsk;
 	struct task_struct *selected = NULL;
 	int rem = 0;
 	int tasksize;
@@ -223,12 +195,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_tasksize = 0;
 	int selected_oom_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_free;
-	int other_file;
-	int fork_boost = 0;
-	size_t minfree_boosted[6] = {0, 0, 0, 0, 0, 0};
-	size_t *min_array;
-	int *adj_array;
+	int other_free = global_page_state(NR_FREE_PAGES);
+	int other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM);
 
 	/*
 	 * If we already have a death outstanding, then
@@ -241,35 +210,16 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	    time_before_eq(jiffies, lowmem_deathpending_timeout))
 		return 0;
 
-	get_free_ram(&other_free, &other_file);
-
-	if (other_free < lowmem_minfree_notif_trigger &&
-			other_file < lowmem_minfree_notif_trigger) {
-		lowmem_notify_killzone_approach();
-	}
-
-	if (lowmem_fork_boost &&
-	    time_before_eq(jiffies, lowmem_fork_boost_timeout)) {
-		for (i = 0; i < lowmem_minfree_size; i++)
-			minfree_boosted[i] = lowmem_minfree[i] + lowmem_fork_boost_minfree[i] ;
-
-		/* Apply fork_boost adj/minfree during boost_duration */
-		adj_array = fork_boost_adj;
-		min_array = minfree_boosted;
-	} else {
-		adj_array = lowmem_adj;
-		min_array = lowmem_minfree;
-	}
+	tune_lmk_param(&other_free, &other_file, sc);
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
-		if (other_free < min_array[i] &&
-		    other_file < min_array[i]) {
-			min_adj = adj_array[i];
-			fork_boost = lowmem_fork_boost_minfree[i];
+		if (other_free < lowmem_minfree[i] &&
+		    other_file < lowmem_minfree[i]) {
+			min_adj = lowmem_adj[i];
 			break;
 		}
 	}
@@ -288,25 +238,28 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	}
 	selected_oom_adj = min_adj;
 
-	read_lock(&tasklist_lock);
-	for_each_process(p) {
-		struct mm_struct *mm;
-		struct signal_struct *sig;
+	rcu_read_lock();
+	for_each_process(tsk) {
+		struct task_struct *p;
 		int oom_adj;
 
-		task_lock(p);
-		mm = p->mm;
-		sig = p->signal;
-		if (!mm || !sig) {
-			task_unlock(p);
+		if (tsk->flags & PF_KTHREAD)
 			continue;
-		}
-		oom_adj = sig->oom_adj;
+
+		/* if task no longer has any memory ignore it */
+		if (test_task_flag(tsk, TIF_MM_RELEASED))
+			continue;
+
+		p = find_lock_task_mm(tsk);
+		if (!p)
+			continue;
+
+		oom_adj = p->signal->oom_adj;
 		if (oom_adj < min_adj) {
 			task_unlock(p);
 			continue;
 		}
-		tasksize = get_mm_rss(mm);
+		tasksize = get_mm_rss(p->mm);
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
@@ -327,37 +280,14 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_adj, selected_tasksize);
-
-		if (lowmem_fork_boost)
-			lowmem_print(1, "current=[%s], min_adj=%d,"
-				" reclaim=%dK, free=%dK,"
-				" file=%dK, fork_boost=%dK\n",
-				current->comm, min_adj,
-				selected_tasksize << 2, other_free << 2,
-				other_file << 2, fork_boost << 2);
-
-		/* Show memory info if we reach certain adjs */
-		if (selected_oom_adj < last_min_selected_adj &&
-			(selected_oom_adj == 12 || selected_oom_adj == 9 ||
-			 selected_oom_adj == 7)) {
-			last_min_selected_adj = selected_oom_adj;
-			show_mem(SHOW_MEM_FILTER_NODES);
-			dump_tasks();
-		}
-		/* Dump tasks if we hit low-memory condition */
-		if (selected_oom_adj < 7) {
-			show_mem(SHOW_MEM_FILTER_NODES);
-			dump_tasks();
-		}
-
 		lowmem_deathpending = selected;
 		lowmem_deathpending_timeout = jiffies + HZ;
-		force_sig(SIGKILL, selected);
+		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 	}
 	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 	return rem;
 }
 
@@ -366,93 +296,15 @@ static struct shrinker lowmem_shrinker = {
 	.seeks = DEFAULT_SEEKS * 16
 };
 
-static void lowmem_notify_killzone_approach(void)
-{
-	lowmem_print(3, "notification trigger activated\n");
-	sysfs_notify(lowmem_kobj, NULL, "notify_trigger_active");
-}
-
-static ssize_t lowmem_notify_trigger_active_show(struct kobject *k,
-		struct kobj_attribute *attr, char *buf)
-{
-	int other_free, other_file;
-	get_free_ram(&other_free, &other_file);
-	if (other_free < lowmem_minfree_notif_trigger &&
-			other_file < lowmem_minfree_notif_trigger)
-		return snprintf(buf, 3, "1\n");
-	else
-		return snprintf(buf, 3, "0\n");
-}
-
-static struct kobj_attribute lowmem_notify_trigger_active_attr =
-	__ATTR(notify_trigger_active, S_IRUGO,
-			lowmem_notify_trigger_active_show, NULL);
-
-static struct attribute *lowmem_default_attrs[] = {
-	&lowmem_notify_trigger_active_attr.attr,
-	NULL,
-};
-
-static ssize_t lowmem_show(struct kobject *k, struct attribute *attr, char *buf)
-{
-	struct kobj_attribute *kobj_attr;
-	kobj_attr = container_of(attr, struct kobj_attribute, attr);
-	return kobj_attr->show(k, kobj_attr, buf);
-}
-
-static const struct sysfs_ops lowmem_ops = {
-	.show = lowmem_show,
-};
-
-static void lowmem_kobj_release(struct kobject *kobj)
-{
-	/* Nothing to be done here */
-}
-
-static struct kobj_type lowmem_kobj_type = {
-	.release = lowmem_kobj_release,
-	.sysfs_ops = &lowmem_ops,
-	.default_attrs = lowmem_default_attrs,
-};
-
 static int __init lowmem_init(void)
 {
-	int rc;
 	task_free_register(&task_nb);
-	task_fork_register(&task_fork_nb);
 	register_shrinker(&lowmem_shrinker);
-#ifdef CONFIG_MEMORY_HOTPLUG
-	hotplug_memory_notifier(lmk_hotplug_callback, 0);
-#endif
-
-	lowmem_kobj = kzalloc(sizeof(*lowmem_kobj), GFP_KERNEL);
-	if (!lowmem_kobj) {
-		rc = -ENOMEM;
-		goto err;
-	}
-
-	rc = kobject_init_and_add(lowmem_kobj, &lowmem_kobj_type,
-			mm_kobj, "lowmemkiller");
-	if (rc)
-		goto err_kobj;
-
 	return 0;
-
-err_kobj:
-	kfree(lowmem_kobj);
-
-err:
-	unregister_shrinker(&lowmem_shrinker);
-	task_fork_unregister(&task_fork_nb);
-	task_free_unregister(&task_nb);
-
-	return rc;
 }
 
 static void __exit lowmem_exit(void)
 {
-	kobject_put(lowmem_kobj);
-	kfree(lowmem_kobj);
 	unregister_shrinker(&lowmem_shrinker);
 	task_free_unregister(&task_nb);
 }
@@ -463,14 +315,7 @@ module_param_array_named(adj, lowmem_adj, int, &lowmem_adj_size,
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
-module_param_named(notify_trigger, lowmem_minfree_notif_trigger, uint,
-			 S_IRUGO | S_IWUSR);
-
-module_param_named(fork_boost, lowmem_fork_boost, uint, S_IRUGO | S_IWUSR);
-module_param_array_named(fork_boost_adj, fork_boost_adj, int,
-			 &fork_boost_adj_size, S_IRUGO | S_IWUSR);
-module_param_array_named(fork_boost_minfree, lowmem_fork_boost_minfree, uint,
-			 &lowmem_fork_boost_minfree_size, S_IRUGO | S_IWUSR);
+module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);
