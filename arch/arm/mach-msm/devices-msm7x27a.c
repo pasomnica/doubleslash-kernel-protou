@@ -842,27 +842,26 @@ static struct resource kgsl_3d0_resources[] = {
 };
 
 static struct kgsl_device_platform_data kgsl_3d0_pdata = {
-	.pwrlevel = {
-		{
-			.gpu_freq = 245760000,
-			.bus_freq = 200000000,
+ 	.pwrlevel = {
+ 		{
+			.gpu_freq = 307200000, 
+            .bus_freq = 213760000,
 		},
 		{
-			.gpu_freq = 192000000,
-			.bus_freq = 160000000,
-		},
-		{
-			.gpu_freq = 133330000,
-			.bus_freq = 0,
-		},
-	},
-	.init_level = 0,
-	.num_levels = 3,
-	.set_grp_async = set_grp_xbar_async,
-	.idle_timeout = HZ,
-	.strtstp_sleepwake = true,
-	.nap_allowed = false,
-	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM,
+ 			.gpu_freq = 245760000,
+ 			.bus_freq = 200000000,
+ 		},
+ 		{
+ 			.gpu_freq = 192000000,
+			.bus_freq = 160000000, 
+ 		},
+ 	},
+ 	.init_level = 0,
+ 	.num_levels = 3,
+ 	.set_grp_async = set_grp_xbar_async,
+ 	.idle_timeout = HZ/5,
+ 	.nap_allowed = false,
+ 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM,
 };
 
 struct platform_device msm_kgsl_3d0 = {
