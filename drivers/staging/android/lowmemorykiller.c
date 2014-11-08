@@ -45,8 +45,6 @@
 #define _ZONE ZONE_NORMAL
 #endif
 
-#define TIF_MM_RELEASED		23	/* task MM has been released */
-
 static uint32_t lowmem_debug_level = 2;
 static int lowmem_adj[6] = {
 	0,
