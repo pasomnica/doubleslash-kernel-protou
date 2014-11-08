@@ -12,6 +12,7 @@
  */
 #ifndef __ARCH_ARM_MACH_MSM_BOARD_7627A__
 #define __ARCH_ARM_MACH_MSM_BOARD_7627A__
+#include <asm/setup.h>
 
 #include "pm.h"
 void __init msm7627a_init_mmc(void);
@@ -19,13 +20,13 @@ void __init msm7627a_init_mmc(void);
 void __init msm_msm7627a_allocate_memory_regions(void);
 void __init msm_fb_add_devices(void);
 
-#define MSM_RAM_CONSOLE_BASE    0x03100000 /* MSM_HTC_RAM_CONSOLE_PHYS must be the same */
+#define MSM_RAM_CONSOLE_BASE    0x03100000 
 #define MSM_RAM_CONSOLE_SIZE    MSM_HTC_RAM_CONSOLE_SIZE
 
 #define MSM_FB_BASE             0x2FB00000
 #define MSM_FB_SIZE             0x00500000
-#define MSM_PMEM_MDP_SIZE       0x2300000
-#define MSM_PMEM_ADSP_SIZE      0x3300000 /* 48 -> 51 */
+#define MSM_PMEM_MDP_SIZE       0x2F00000
+#define MSM_PMEM_ADSP_SIZE      0x3300000 
 #define MSM_PMEM_ADSP2_SIZE     0x2C0000
 #define PMEM_KERNEL_EBI1_SIZE	0x3A000
 #define MSM_PMEM_AUDIO_SIZE		0x1F4000
