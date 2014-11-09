@@ -12,7 +12,7 @@
  * GNU General Public License for more details.
  *
  */
-#include "tsmods.h"
+#include <linux/read_ts.h>
 #include <linux/pl_sensor.h>
 #include <linux/himax8526a.h>
 #include <linux/delay.h>
